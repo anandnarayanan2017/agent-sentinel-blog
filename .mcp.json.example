@@ -1,0 +1,10 @@
+{
+  "$comment": "Course Day 2 alignment: MCP servers this project may use. Copy to .mcp.json. Every server here must also be listed in sdlc.env MCP_ALLOWED_SERVERS - the rules file and evaluator treat any other MCP tool call as a finding.",
+  "mcpServers": {
+    "example-internal-api": {
+      "type": "http",
+      "url": "https://your-apim-gateway.example.com/mcp",
+      "$comment": "Route MCP through your APIM gateway (auth, policy, logging) - never direct-to-backend."
+    }
+  }
+}

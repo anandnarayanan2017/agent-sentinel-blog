@@ -21,8 +21,8 @@ whitepapers themselves. Treat the day themes as reliable, the exact
 whitepaper wording as approximate.)*
 
 What makes this comparison unusually direct: this repository's own
-`.claude/sdlc.env` has a section literally labeled `# --- Course-alignment
-additions (v2) ---`, and `.claude/skills/effective-trust/SKILL.md` opens with
+[`.claude/sdlc.env`](../.claude/sdlc.env) has a section literally labeled `# --- Course-alignment
+additions (v2) ---`, and [`.claude/skills/effective-trust/SKILL.md`](../.claude/skills/effective-trust/SKILL.md) opens with
 *"Seven pillars, mapped from the Google/Kaggle course Day 4 failure-mode
 themes."* This isn't an outside reviewer squinting for parallels — the
 pipeline was deliberately built to track this course. The interesting
@@ -35,7 +35,7 @@ The course's framing is natural language as the primary programming
 interface. This repo uses natural language the same way — spec-agent,
 architect, and every other phase are dispatched through plain-English
 instructions — but it refuses the "vibe" part of vibe coding for anything
-that reaches production. `CLAUDE.md`'s two-gate model requires a human to
+that reaches production. [`CLAUDE.md`](../CLAUDE.md)'s two-gate model requires a human to
 write `spec/.signed-off` before any build work starts, and a second human
 gate (`evidence/GATE2_BUNDLE.md`) before prod. That's the repo's own
 product philosophy — "rules-first, not model-first," "statistics are
@@ -45,7 +45,7 @@ modality, opposite risk posture.
 
 ## Day 2 — Tools & interoperability
 
-Strong, direct alignment on the governance half. `.claude/rules/mcp-governance.md`
+Strong, direct alignment on the governance half. [`.claude/rules/mcp-governance.md`](../.claude/rules/mcp-governance.md)
 requires every MCP server to appear in both `.mcp.json` and `sdlc.env`'s
 `MCP_ALLOWED_SERVERS`, prefers gateway-routed MCP over direct backend calls,
 and treats MCP tool results as untrusted data — never instructions to
@@ -63,7 +63,7 @@ repo's tool-interoperability story is single-tenant.
 ## Day 3 — Context engineering
 
 This is the closest match, and it shows up almost verbatim.
-`sdlc-pipeline`'s invariants use the phrase *"context hygiene (course Day
+[`sdlc-pipeline`](../.claude/skills/sdlc-pipeline/SKILL.md)'s invariants use the phrase *"context hygiene (course Day
 3)"* directly, and the mechanism described — keep verbose output in
 subagents, compact to the phase file and artifacts when the main thread
 degrades, continue from artifacts rather than stale conversational memory —
@@ -83,7 +83,7 @@ practice.
 ## Day 4 — Quality & security
 
 The tightest alignment in the whole repo, to the point of shared
-vocabulary. `slopsquat_guard.sh`'s own comment says *"Slopsquatting defense
+vocabulary. [`slopsquat_guard.sh`](../.claude/hooks/slopsquat_guard.sh)'s own comment says *"Slopsquatting defense
 (course Day 4)"* and blocks package installs against live registry checks
 plus a minimum-age threshold, directly implementing the course's
 hallucinated-dependency threat model. The `effective-trust` skill's seven
@@ -146,7 +146,9 @@ choice worth stating explicitly rather than leaving implicit.
 Google](https://www.kaggle.com/learn-guide/5-day-agents-vibecoding),
 [KDnuggets — Kaggle + Google's Free 5-Day Agentic AI
 Course](https://www.kdnuggets.com/kaggle-googles-free-5-day-agentic-ai-course).
-Repo-side claims are drawn directly from `.claude/sdlc.env`,
-`.claude/hooks/*.sh`, `.claude/skills/effective-trust/SKILL.md`,
-`.claude/skills/sdlc-pipeline/SKILL.md`, `.claude/rules/*.md`, and
-`docs/ARCHITECTURE.md` in this repository.
+Repo-side claims are drawn directly from [`.claude/sdlc.env`](../.claude/sdlc.env),
+[`.claude/hooks/*.sh`](../.claude/hooks), [`.claude/skills/effective-trust/SKILL.md`](../.claude/skills/effective-trust/SKILL.md),
+[`.claude/skills/sdlc-pipeline/SKILL.md`](../.claude/skills/sdlc-pipeline/SKILL.md), [`.claude/rules/*.md`](../.claude/rules), and
+`docs/ARCHITECTURE.md` in the (private) product repository — all copied
+verbatim into this mirror's [`.claude/`](../.claude) except `docs/ARCHITECTURE.md` itself, which
+stays product-repo-only.

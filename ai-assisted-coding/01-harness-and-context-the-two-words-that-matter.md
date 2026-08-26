@@ -41,7 +41,7 @@ matter precisely because models can be talked into, confused into, or simply
 drift into doing the thing you told them not to do in natural language. This
 is the same "rules-first, statistics-second" instinct this repository's own
 product (an AI-agent behavioral firewall) applies to *other* agents' traffic
-— see [`docs/ARCHITECTURE.md`](../../ARCHITECTURE.md) — turned reflexively on
+— see `docs/ARCHITECTURE.md` in the product repo — turned reflexively on
 the coding agent itself.
 
 ## Context engineering: what the model is allowed to see, right now
