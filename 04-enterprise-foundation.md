@@ -1,82 +1,38 @@
 # Part 4 — The Enterprise Foundation
 
-**LinkedIn hook:**
+> The difference between a demo and an enterprise platform is not prettier charts. It is identity, storage, auditability, and approvals.
 
-> The difference between a demo and an enterprise platform is not prettier charts. It is identity, storage, auditability, approvals, and operations.
+## In plain terms
 
-Phase 3 turns the pilot into something a regulated security team can evaluate seriously.
+A cool demo answers "does it work?". A bank's security team asks different questions: **Who is allowed to see this? Can you prove nobody tampered with the records? When something serious is flagged, who reviews it and where is that decision recorded?**
 
-## Phase 3 enterprise architecture
+Phase 3 of Agent Sentinel was about answering those questions — the unglamorous plumbing that makes a regulated buyer take the product seriously.
+
+## For the technical reader
 
 ```mermaid
-flowchart TB
-    subgraph Runtime["Runtime Capture"]
-        SDKS["Azure OpenAI + Anthropic SDK wrappers"]
-        PROXY["Egress proxy / future service mesh"]
-        APIM["Azure APIM policy\nroadmap"]
-    end
-
-    subgraph API["Collector API"]
-        FASTAPI["FastAPI\n/ingest /findings /stream"]
-        AUTH["Entra ID JWT auth\nsentinel.write / sentinel.admin"]
-        AUDIT["Audit middleware\npayload hash, source IP, latency"]
-    end
-
-    subgraph Data["Data Plane"]
-        DUCK[("DuckDB\nlocal/dev")]
-        PG[("PostgreSQL / TimescaleDB\nenterprise persistence")]
-        APPROVALS["Approvals table\nHIGH/CRITICAL review"]
-    end
-
-    subgraph UX["CISO Experience"]
-        DASH["Live dashboard"]
-        REVIEW["Approvals queue"]
-        AUDITUI["Audit log API"]
-    end
-
-    subgraph Integrations["Security Integrations"]
-        WH["Webhook alerting\nTeams / Slack / PagerDuty style"]
-        LA["Azure Log Analytics\nMicrosoft Sentinel feed"]
-    end
-
-    SDKS --> FASTAPI
-    PROXY --> FASTAPI
-    APIM -. roadmap .-> FASTAPI
-    FASTAPI --> AUTH
-    FASTAPI --> AUDIT
-    AUDIT --> DUCK
-    AUDIT --> PG
-    PG --> APPROVALS
-    DUCK --> DASH
-    PG --> DASH
-    APPROVALS --> REVIEW
-    PG --> AUDITUI
-    FASTAPI --> WH
-    FASTAPI --> LA
+flowchart LR
+    IN["SDK wrappers\n+ egress proxy"] --> API["Collector API\nEntra ID auth · audit middleware"]
+    API --> DB[("PostgreSQL / TimescaleDB\nevents · findings · audit trail")]
+    DB --> UX["Dashboard · approvals queue\n· audit log API"]
 ```
 
-| Capability | Current Repo Implementation | Notes |
-|---|---|---|
-| Auth | `app/sentinel/api/auth.py` | Entra ID JWT validation when `AZURE_TENANT_ID` and `AZURE_CLIENT_ID` are set; dev bypass otherwise |
-| Audit trail | `app/sentinel/api/audit.py` | Captures endpoint, source IP, payload hash, status, latency, user id |
-| PostgreSQL / TimescaleDB | `app/sentinel/storage/pg_store.py` | Activated through `DATABASE_URL`; falls back to DuckDB when absent |
-| Approval workflow | `/approvals`, `/approvals/{id}` | Auto-created for high/critical findings in Postgres backend |
-| SSE live stream | `/stream` | Pushes stats, findings, events, pending approvals every 1.5 seconds |
-| Webhook alerting | `app/sentinel/alerting/webhook.py` | Sends high-signal findings to webhook targets |
-| Log Analytics export | `app/sentinel/siem/log_analytics.py` | Pushes findings to Azure Monitor / Log Analytics |
+What got built:
 
-## Enterprise gaps still open
+- **Identity:** Entra ID JWT auth on the API — agents and humans authenticate like any other enterprise workload.
+- **Durable storage:** PostgreSQL/TimescaleDB backend (DuckDB stays for local dev), so evidence survives and scales.
+- **Audit trail:** every API call recorded with source, payload hash, and latency — the recorder itself is auditable.
+- **Approvals:** HIGH/CRITICAL findings automatically open a review item; a human decision becomes part of the record.
 
-| Gap | Why It Matters | Roadmap Direction |
-|---|---|---|
-| Multi-tenancy | Enterprises need org/team/env isolation | Add `tenant_id`, `org_id`, `environment` across schema and policy |
-| Policy lifecycle | YAML files do not scale to many teams | Policy API, GitOps sync, approvals, version history |
-| Queue-backed ingestion | Direct HTTP can struggle during bursts | Azure Event Hub or Kafka with replay and DLQ |
-| Key management | Env vars are not enough for regulated deployment | Azure Key Vault, managed identity, customer-managed keys |
-| HA deployment | Single-node is not production enough | Azure Container Apps/AKS, horizontal replicas, health probes |
+Just as honestly, what's still open: multi-tenancy, a policy lifecycle beyond YAML files, queue-backed ingestion, and HA deployment. Naming the gaps is part of the credibility.
 
-## The two-gate SDLC behind the code
+One more layer of "auditable by design": the codebase itself is built through a two-human-gate SDLC — a signed-off frozen spec on one end, an evidence bundle a human approves on the other, with AI agents doing the work in between under hooks that enforce the rules.
 
-Worth showing, not just the runtime architecture: every change in this repo goes through a disciplined two-gate process — a human signs off a frozen spec (Gate 1), then spec-agent → architect → adr-critic → build → code-reviewer/security-reviewer → test → UAT → trust evaluation run before a human approves the Gate 2 evidence bundle for production. `spec/`, `design/`, and `evidence/` are the transient artifacts of that pipeline for the in-flight change; `archive/` keeps a record of completed runs. That process discipline is itself part of the "auditable by design" pitch — the same reasoning behind the compliance-control mapping.
+## Dig into the code
 
-Next: [Part 5 — Feeding the SOC, and What's Next](05-soc-and-whats-next.md).
+- API auth: [`app/sentinel/api/auth.py`](https://github.com/anandnarayanan2017/agent-sentinel/blob/master/app/sentinel/api/auth.py)
+- Audit middleware: [`app/sentinel/api/audit.py`](https://github.com/anandnarayanan2017/agent-sentinel/blob/master/app/sentinel/api/audit.py)
+- Postgres/TimescaleDB store: [`app/sentinel/storage/pg_store.py`](https://github.com/anandnarayanan2017/agent-sentinel/blob/master/app/sentinel/storage/pg_store.py)
+- Compliance mapping: [`docs/COMPLIANCE.md`](https://github.com/anandnarayanan2017/agent-sentinel/blob/master/docs/COMPLIANCE.md)
+
+Next: [Part 5 — Feeding the SOC, and What's Next](05-soc-and-whats-next.md)
