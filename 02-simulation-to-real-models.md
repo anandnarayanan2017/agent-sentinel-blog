@@ -1,181 +1,38 @@
-# Part 2 — From Simulated Traffic to Real Model Calls
+# Part 2 — Record First, Enforce Later
 
-**LinkedIn hook:**
+> Before you block an AI agent's behavior, record it well enough that a CISO can trust the evidence.
 
-> Start small: before blocking agent behavior, record it well enough that a CISO can trust the evidence.
+## In plain terms
 
-Phase 1 proves the core idea with simulated fintech traffic, deterministic policy checks, DuckDB storage, and a local dashboard. Phase 2 then swaps simulation for real Azure OpenAI / Anthropic calls without changing the core loop.
+You don't start policing traffic by handing out fines — you start by installing the dashcam. Agent Sentinel's first job was the same: **watch and record reliably before ever blocking anything**.
 
-## Phase 1 — the POC flight recorder
+We built it in two steps. First, a working prototype fed with *simulated* bank-agent traffic — safe, repeatable, and easy to demo an attack in. Then we swapped the simulation for **real AI model calls** (Azure OpenAI, Anthropic) without changing anything else.
 
-```mermaid
-flowchart LR
-    subgraph Agents["Phase 1 - Simulated Agents"]
-        SIM["examples/phase1/fintech_sim/sim.py\ncontinuous fintech traffic"]
-        DEMO["examples/phase1/demo_agent/scenario.py\nnormal plus attack story"]
-    end
+## For the technical reader
 
-    subgraph Sentinel["Agent Sentinel Core"]
-        API["FastAPI Collector\nPOST /ingest"]
-        PARSER["Parser\nraw flow to AgentEvent"]
-        ENGINE["Detection Engine\npolicy plus baseline"]
-        STORE[("DuckDB\nevents and findings")]
-        DASH["CISO Dashboard\nGET / and /stream"]
-    end
-
-    subgraph Policy["Policy-as-Code"]
-        YAML["policies/fintech.yaml\nagent allow-lists"]
-    end
-
-    SIM -->|"HTTP JSON events"| API
-    DEMO -->|"direct scenario events"| API
-    API --> PARSER --> ENGINE --> STORE
-    YAML --> ENGINE
-    STORE --> DASH
-```
-
-| Capability | Implementation |
-|---|---|
-| Event simulation | `examples/phase1/fintech_sim/sim.py` creates realistic fintech network traffic |
-| Policy-as-code | `policies/fintech.yaml` defines allowed hosts, tools, models, bytes, and controls |
-| Normalization | `parse_flow()` converts raw traffic into one `AgentEvent` schema |
-| Detection | Rules catch unapproved hosts, tools, models, oversize egress, and rate violations |
-| Evidence | Findings include title, rule, severity, explanation, evidence, and control refs |
-| Storage | DuckDB tables: `events` and `findings` |
-| UX | Local CISO board with severity cards, charts, filters, evidence drawer, event feed |
-
-```yaml
-agents:
-  - agent_id: recon-bot
-    allowed_hosts:
-      - api.anthropic.com
-      - ledger.internal
-      - reports.internal
-    allowed_tools:
-      - read_ledger
-      - send_report
-    allowed_models:
-      - claude-sonnet-4-6
-    max_tool_calls_per_session: 20
-    max_bytes_out_per_call: 100000
-    control_refs:
-      - "DORA Art.10 (anomaly detection)"
-      - "EU AI Act Art.12 (logging)"
-      - "CSSF 20/750 (ICT risk)"
-```
-
-```mermaid
-sequenceDiagram
-    participant Sim as Fintech Simulator
-    participant API as FastAPI /ingest
-    participant Parser as Parser
-    participant Engine as Detection Engine
-    participant DB as DuckDB
-    participant UI as CISO Dashboard
-
-    Sim->>API: Normal event: recon-bot to ledger.internal
-    API->>Parser: parse_flow()
-    Parser-->>API: AgentEvent(action=NETWORK_CALL)
-    API->>Engine: evaluate(event)
-    Engine-->>API: [] no findings
-    API->>DB: store event
-
-    Sim->>API: Attack event: recon-bot to attacker-exfil.example, 250KB
-    API->>Parser: parse_flow()
-    Parser-->>API: AgentEvent(host=attacker-exfil.example, bytes_out=250000)
-    API->>Engine: host allow-list plus bytes policy
-    Engine-->>API: HIGH net.host_not_allowed plus HIGH net.oversize_egress
-    API->>DB: store findings
-    UI->>API: GET /stream
-    API-->>UI: live finding update
-```
-
-## Phase 2 — real cloud models
-
-```mermaid
-flowchart TB
-    subgraph AgentCode["Agent Application"]
-        APP["Business logic\nKYC / fraud / payments"]
-        SDK["Sentinel SDK Wrapper\nAzureOpenAISentinel / AnthropicSentinel"]
-    end
-
-    subgraph CloudModels["Cloud Model Providers"]
-        AZ["Azure OpenAI\n*.openai.azure.com"]
-        ANT["Anthropic API\napi.anthropic.com"]
-    end
-
-    subgraph Sentinel["Agent Sentinel"]
-        INGEST["POST /ingest"]
-        STREAM["GET /stream\nServer-Sent Events"]
-        ENGINE["Detection Engine"]
-        DB[("DuckDB or PostgreSQL")]
-        UI["Live CISO Dashboard"]
-    end
-
-    APP --> SDK
-    SDK -->|"real model request"| AZ
-    SDK -->|"real model request"| ANT
-    SDK -->|"redacted telemetry"| INGEST
-    INGEST --> ENGINE --> DB
-    DB --> STREAM --> UI
-```
-
-```python
-from sentinel.collector.azure_openai import AzureOpenAISentinel
-
-client = AzureOpenAISentinel(
-    azure_endpoint=os.environ["AZURE_OPENAI_ENDPOINT"],
-    api_key=os.environ["AZURE_OPENAI_API_KEY"],
-    api_version=os.environ["AZURE_OPENAI_API_VERSION"],
-    sentinel_api=os.environ.get("SENTINEL_API", "http://localhost:8000"),
-    agent_id="kyc-agent",
-    session_id="kyc-run-001",
-)
-
-response = client.chat.completions.create(
-    model=os.environ["AZURE_OPENAI_DEPLOYMENT"],
-    messages=[
-        {"role": "user", "content": "Summarize this KYC discrepancy."}
-    ],
-)
-```
-
-| Step | What Happens |
-|---|---|
-| 1 | Sends the real call to Azure OpenAI or Anthropic |
-| 2 | Builds redacted telemetry: host, path, model, message count, bytes, status |
-| 3 | Posts the event to `POST /ingest` for policy evaluation |
-
-| File | Role |
-|---|---|
-| `app/sentinel/collector/sdk_base.py` | Shared fail-open HTTP reporter |
-| `app/sentinel/collector/azure_openai.py` | Azure OpenAI wrapper |
-| `app/sentinel/collector/anthropic_sdk.py` | Anthropic wrapper |
-| `examples/phase2/azure_agent.py` | Azure OpenAI example agent |
-| `examples/phase2/anthropic_agent.py` | Anthropic example agent |
-| `examples/phase2/.env.example` | Required environment variable template |
-| `start_phase2.sh` | One-command Phase 2 launcher |
-
-### Why fail open first?
-
-For early observability, Sentinel should not break production agents if the collector is temporarily unavailable.
+The core loop stayed identical through both phases:
 
 ```mermaid
 flowchart LR
-    A["Agent calls model"] --> B{"Sentinel reachable?"}
-    B -->|"Yes"| C["Send telemetry to /ingest"]
-    B -->|"No"| D["Log local warning"]
-    C --> E["Return model response"]
-    D --> E
+    A["Agent traffic\n(simulated → real SDK calls)"] --> B["Collector\nPOST /ingest"]
+    B --> C["Parser\n→ one AgentEvent schema"]
+    C --> D["Detection engine\nYAML policy + baseline"]
+    D --> E["Findings store\n+ live CISO dashboard"]
 ```
 
-Later enforcement modes can become stricter:
+Three design choices did the heavy lifting:
 
-| Mode | Behavior |
-|---|---|
-| Observe | Never block, only record |
-| Warn | Record and alert |
-| Block | Stop calls violating policy |
-| Quarantine | Disable agent/session after critical events |
+1. **One normalized schema.** Everything — LLM call, tool call, network egress — becomes an `AgentEvent`. Detectors never see provider-specific formats.
+2. **Policy as readable YAML.** Each agent gets an envelope: allowed hosts, tools, models, egress limits — with regulatory control references attached. An auditor can read it.
+3. **Fail-open SDK wrappers.** Real model calls go through a thin wrapper that sends redacted telemetry (host, model, byte counts — not prompts) to the collector. If the collector is down, the agent keeps working. Observability should never be the outage.
 
-Next: [Part 3 — Rules First, Statistics Second](03-rules-first-statistics-second.md).
+Blocking modes (warn → block → quarantine) come later, once the recording is trusted.
+
+## Dig into the code
+
+- Fintech traffic simulator: [`examples/phase1/fintech_sim/sim.py`](https://github.com/anandnarayanan2017/agent-sentinel/blob/master/examples/phase1/fintech_sim/sim.py)
+- Example policy envelope: [`policies/fintech.yaml`](https://github.com/anandnarayanan2017/agent-sentinel/blob/master/policies/fintech.yaml)
+- Azure OpenAI wrapper: [`app/sentinel/collector/azure_openai.py`](https://github.com/anandnarayanan2017/agent-sentinel/blob/master/app/sentinel/collector/azure_openai.py)
+- Anthropic wrapper: [`app/sentinel/collector/anthropic_sdk.py`](https://github.com/anandnarayanan2017/agent-sentinel/blob/master/app/sentinel/collector/anthropic_sdk.py)
+
+Next: [Part 3 — Rules First, Statistics Second](03-rules-first-statistics-second.md)

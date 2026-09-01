@@ -1,54 +1,34 @@
 # Part 1 — Why AI Agents Need a Flight Recorder
 
-**LinkedIn hook:**
+> Your payment reconciliation agent just called an LLM, invoked a ledger tool, and sent 250KB of data to a server nobody approved. Could you prove what happened?
 
-> Your payment reconciliation agent just called an LLM, invoked a ledger tool, and sent 250KB to a host nobody approved. Could you prove what happened?
+## The problem, in plain terms
 
-Traditional logs tell you that an HTTP request occurred. Agent Sentinel explains **which agent acted, which model it used, which tool it called, what policy it violated, and what evidence proves it**.
+Companies are starting to let AI agents do real work: reconcile payments, check customer identities, draft reports. These agents are effectively **new employees with system access** — they read data, use internal tools, and talk to the internet.
 
-## C4 Level 1 — System Context
+But unlike a human employee, nobody is watching them work. If an agent does something wrong — by mistake, by manipulation, or by going off-script — most companies today could not reconstruct what happened, let alone prove it to a regulator.
+
+Airplanes solved this decades ago: the flight recorder. It doesn't fly the plane; it makes sure that whatever happens, there is trustworthy evidence of it.
+
+## The problem, for the technical reader
+
+An AI agent produces three kinds of traffic: **LLM calls** (which model, what was sent), **tool calls** (which API or MCP tool, with what arguments), and **network egress** (where did data go, how much). Your existing logs will tell you "an HTTPS request occurred." They won't tell you *which agent* acted, *whether that tool was allowed for it*, or *why this matters for DORA or the EU AI Act*.
+
+**Agent Sentinel** is a flight recorder and behavioral firewall for AI agents. It intercepts that traffic, checks it against explicit policy, and produces findings a security analyst — and an auditor — can actually read.
 
 ```mermaid
-C4Context
-  title Agent Sentinel - AI-Agent Runtime Control Plane
-
-  Person(ciso, "CISO / Security Analyst", "Reviews findings, monitors agent risk, exports evidence to SOC and auditors")
-  Person(auditor, "Auditor / Regulator", "Needs proof of logging, oversight, and incident handling")
-
-  System(agentSentinel, "Agent Sentinel", "Detects, explains, enforces, and exports AI-agent behavior findings")
-
-  System_Ext(agents, "AI Agents / M2M Identities", "KYC agents, fraud agents, payment bots, reconciliation workflows")
-  System_Ext(llms, "Cloud Model Providers", "Azure OpenAI, Anthropic, OpenAI, Bedrock, Gemini")
-  System_Ext(tools, "Enterprise Tools / MCP Servers", "Ledger APIs, payment APIs, report sinks, CRM, data platforms")
-  System_Ext(identity, "Identity Provider", "Microsoft Entra ID, workload identity, service principals")
-  System_Ext(siem, "SIEM / SOAR", "Microsoft Sentinel, Splunk, PagerDuty, Jira, ServiceNow")
-
-  Rel(agents, agentSentinel, "Send model/tool/network events", "SDK, proxy, APIM, Event Hub")
-  Rel(agentSentinel, llms, "Observes and optionally enforces model policy", "Azure OpenAI / Anthropic APIs")
-  Rel(agentSentinel, tools, "Checks tool authorization and data egress", "HTTP / MCP / internal APIs")
-  Rel(identity, agentSentinel, "Authenticates users and workloads", "OIDC / Entra ID")
-  Rel(ciso, agentSentinel, "Reviews live dashboard and evidence", "Web UI / API")
-  Rel(agentSentinel, siem, "Exports high-fidelity findings", "Log Analytics, webhook, CEF, JSON")
-  Rel(ciso, auditor, "Provides audit evidence", "DORA / EU AI Act / CSSF evidence")
+flowchart LR
+    A["AI Agent\n(KYC bot, payments copilot...)"] -->|"LLM calls · tool calls · data egress"| S["Agent Sentinel\nrecord → check policy → explain"]
+    S -->|"explainable findings + evidence"| C["Security team\n& auditors"]
 ```
 
-## Implementation details
+Every alert answers five questions: **which agent** acted, **which model** it used, **which tool** it called, **what policy** it violated, and **what evidence** proves it.
 
-The core loop is deliberately small:
+## Dig into the code
 
-```text
-collector -> parser -> AgentEvent -> detection engine -> Finding -> storage -> dashboard/SIEM
-```
+- Event and finding schema: [`app/sentinel/schema/events.py`](https://github.com/anandnarayanan2017/agent-sentinel/blob/master/app/sentinel/schema/events.py)
+- Detection engine: [`app/sentinel/detection/engine.py`](https://github.com/anandnarayanan2017/agent-sentinel/blob/master/app/sentinel/detection/engine.py)
+- Explainability layer: [`app/sentinel/explain/explainer.py`](https://github.com/anandnarayanan2017/agent-sentinel/blob/master/app/sentinel/explain/explainer.py)
+- Full architecture: [`docs/ARCHITECTURE.md`](https://github.com/anandnarayanan2017/agent-sentinel/blob/master/docs/ARCHITECTURE.md)
 
-| Repo Area | What It Implements |
-|---|---|
-| `app/sentinel/schema/events.py` | Normalized `AgentEvent`, `Finding`, `Evidence`, severity, and action types |
-| `app/sentinel/collector/parsers.py` | Classifies raw traffic as `LLM_CALL`, `TOOL_CALL`, `NETWORK_CALL`, or `DATA_ACCESS` |
-| `app/sentinel/detection/engine.py` | Deterministic policy checks plus baseline anomaly checks |
-| `app/sentinel/explain/explainer.py` | Human-readable finding explanations with policy clauses and control refs |
-| `app/sentinel/storage/store.py` | DuckDB local storage for POC and local pilots |
-| `app/sentinel/storage/pg_store.py` | PostgreSQL / TimescaleDB storage for enterprise-grade persistence |
-| `app/sentinel/api/main.py` | REST API, SSE stream, approvals, audit log, dashboard serving |
-| `dashboard/index.html` | CISO dashboard with live findings, evidence drawer, approvals, events feed |
-
-Next: [Part 2 — From Simulated Traffic to Real Model Calls](02-simulation-to-real-models.md).
+Next: [Part 2 — Record First, Enforce Later](02-simulation-to-real-models.md)
