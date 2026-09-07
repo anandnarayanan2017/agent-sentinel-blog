@@ -473,3 +473,130 @@ flowchart TB
 6. **Evidence is produced as a by-product of enforcement**, not assembled
    retrospectively. The audit log is written by the same hooks that enforce,
    which is what makes the Gate 2 bundle attestable.
+
+
+---
+
+# Addendum — product repository analysed, and quick wins landed
+
+**Added:** 2026-09-07 · **Product repo:** `anandnarayanan2017/agent-sentinel@110e2fb`
+(attached to the session and cloned after the assessment above was written)
+
+The original assessment could only see the mirror. With the product repo
+attached, several findings resolve differently — and one gets considerably
+worse.
+
+## A1. What the product repo actually contains
+
+| Area | Product repo | Mirror |
+|---|---|---|
+| Agents | **10** under `.claude/agents/` | absent |
+| Skills | **6** (`sdlc-pipeline`, `effective-trust`, `new-adr`, `uat-evidence`, `design-from-adr`, `deploy`) | 2 |
+| ADRs | **8** under `docs/adr/` (0001-0008) | absent |
+| CI | **3** workflows (`ci.yml`, `agent-pipeline.yml`, `sentinel-nightly.yml`, the last 231 lines) | none |
+| Gate 2 | real — `environment: production` with required reviewers (`agent-pipeline.yml:45`) | none |
+| Pipeline artifacts | `spec/` (SPEC, ACCEPTANCE, UAT), `design/` (DESIGN, CRITIC_VERDICT), `evidence/` (GATE2_BUNDLE, TRUST_REPORT, UAT_RESULTS), `review/` (4 security reviews) | none |
+| Code / tests | 72 app modules, 22 test files | 0 |
+| Compliance | `docs/COMPLIANCE.md`, `docs/compliance/standards-map.md` | none |
+| Other | `LICENSE`, `CONTRIBUTING.md`, `.gitattributes` | none |
+
+So the maturity scores in the body of this document are scores for **the
+mirror**, not for the programme. The product repository is materially more
+mature on every dimension: Verification is a genuine 3 (SHA-pinned
+third-party Actions with matching ADRs 0006/0007, nightly Postgres +
+TimescaleDB smoke tests asserting real findings), and Governance a genuine
+3-4 (a `production` environment gated on required reviewers, with a
+release-labelled PR required to carry a Gate 2 bundle and a trust report).
+
+**The "copied verbatim" claim checks out.** All 13 shared `.claude/` files
+were byte-identical by git blob hash at the time of assessment — hooks,
+rules, `sdlc.env`, `settings.json`, both shared skills, `.mcp.json.example`.
+The mirror's problem was never fidelity; it was **completeness** (16 files
+never copied) and now, deliberately, two files that are ahead (A3).
+
+## A2. Finding R1 is worse than reported: it is in the product repo too
+
+`git ls-files -s .claude/hooks/` on the product repo returns mode `100644`
+for all five hooks — the same defect. It was not a mirroring artifact.
+
+Verified empirically against the product checkout: dispatching
+`guard_pretooluse.sh` on a forbidden command returns **exit 126
+("Permission denied")**, not the exit 2 that means *blocked*. Claude Code
+treats 2 as blocking and every other non-zero exit as a non-blocking error,
+so **the enforcement layer fails open**. Concretely, in the repository that
+has live CI, a `production` environment and real Terraform paths:
+
+- forbidden commands were permitted, not denied;
+- `slopsquat_guard.sh` waved through package installs;
+- `stop_gate.sh` allowed "done" on red tests;
+- `audit_log.sh` wrote nothing — removing the substrate all seven
+  `effective-trust` pillars are scored from, while `evidence/TRUST_REPORT.md`
+  continued to exist.
+
+**Why nobody caught it.** The product repo's own
+`review/SECURITY_harness_enforcement_fixes.md` reviewed these exact hooks
+carefully — injection sinks, `set -euo pipefail` behavior, mtime edge
+cases, fail-open vs fail-closed direction of the backslash normalization —
+and concluded "both real enforcement chokepoints are intact." That was
+accurate about content. Mode was never examined. The repo had even solved
+the adjacent problem: `.gitattributes` pins `*.sh text eol=lf` so a CRLF
+checkout cannot break a hook. Line endings were governed; the exec bit was
+not. This is the precise blind spot Pillar 4's content-only `sha256sum`
+could not close, and it upgrades R8 from Medium to **High**.
+
+## A3. Quick wins landed on this branch
+
+| Win | Change | Verification |
+|---|---|---|
+| Q1 | `git update-index --chmod=+x .claude/hooks/*.sh` — all five now `100755`, content untouched (blob hashes unchanged) | forbidden command now `exit=2` with the BLOCKED message; `ls -la` still `exit=0` |
+| Q2 | `effective-trust` Pillar 4 now fingerprints **content and mode** (`stat -c '%n %a'`), plus new fail-closed step 1a: any non-executable hook is Pillar 4 = 0 and a HALT | reviewed in `review/SECURITY_harness-mode-enforcement.md` |
+| Q2b | `sdlc-pipeline` Phase 0 records mode alongside the content hash, so recorder and verifier stay symmetric | as above |
+
+A hand-written `review/SECURITY_harness-mode-enforcement.md` accompanies the
+change, as `guard_pretooluse.sh`'s own commit gate requires. **It carries an
+explicit caveat**: the real `security-reviewer` agent is not mirrored here,
+so writer and reviewer were the same agent — the pipeline's central
+invariant could not be satisfied structurally. That is recorded in the
+review rather than papered over, and the same fix must go through the real
+reviewer in the product repo.
+
+### A live demonstration, unplanned
+
+Immediately after Q1, an attempt to author documentation *about* the
+forbidden commands was itself blocked — `BLOCKED_COMMAND_PATTERNS` is
+grepped against the whole `tool_input.command` string, so a heredoc quoting
+a forbidden phrase matches. The guard was working, seconds after being
+re-armed. It is fail-closed and therefore acceptable, but it is a real
+false-positive characteristic worth knowing: prose that quotes blocked
+patterns must be written with a file-write tool, not a shell heredoc. It was
+simply unobservable while the hooks were inert.
+
+## A4. Blog ↔ repo alignment
+
+| Claim in the blog | Status |
+|---|---|
+| "`.claude/` copied verbatim from the product repo" | **Was over-broad** — true for the 13 files present, but 16 were never copied. Now scoped explicitly in `ai-assisted-coding/02`. |
+| "the ten agents under `.claude/agents/`" | **Was false for this repo** — they exist in the product repo only. Corrected, and the post now carries the verified `tools:`/model table for all ten. |
+| `agent-evaluator` gets `Read, Grep, Glob, Bash` only | **Verified true** (`.claude/agents/agent-evaluator.md`) |
+| Rules are path-scoped by frontmatter `globs:` | **Verified true** (`ci-supply-chain.md`, `mcp-governance.md`) |
+| Parts 1-5 are the whole series | **Stale** — the product repo has Parts 6-10 (Series 2, the ADR-0008 network collector) plus `docs/blog/linkedin/` variants, unmirrored. Now flagged in `README.md`. |
+
+Parts 1-5 diverge from the product repo's versions by 60-189 lines each, but
+that is the deliberate short dual-audience rewrite (commit `7cee217`), not
+drift. The `ai-assisted-coding/` posts diverged only by added relative links
+— before this change.
+
+## A5. Revised priorities
+
+R1 (now product-repo-wide, fails open) supersedes everything else in the
+original quick-wins list. In priority order:
+
+1. **Apply Q1/Q2/Q2b to the product repository**, through the real
+   `security-reviewer`. That repo is the one with a `production` environment.
+2. **Add a CI assertion so this cannot regress**: a job that fails if any
+   `.claude/hooks/*.sh` is not executable. `.gitattributes` cannot express
+   the exec bit, so CI is the enforcement point.
+3. **Re-run `effective-trust` against a real audit log.** Every trust report
+   produced while `audit_log.sh` was inert was scored on an empty or absent
+   substrate and should be treated as unevidenced.
+4. Then resume the original Q3-Q8 / M1-M9 list.
