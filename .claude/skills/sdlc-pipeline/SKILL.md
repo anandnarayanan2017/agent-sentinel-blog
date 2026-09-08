@@ -20,9 +20,20 @@ actually checking anything, and Gate 2's evidence bundle would attest to
 checks that never ran. STOP and tell the human to fill in `sdlc.env` for real
 before proceeding; do not run the pipeline against placeholder values.
 
-Record `sha256sum .claude/hooks/* .claude/settings.json` into
-`.claude/pipeline-state/enforcement.sha256`. The trust evaluation verifies this
-is unchanged at the end — a mutated enforcement layer mid-run is a HALT.
+Record BOTH the content hash and the file mode of the enforcement layer into
+`.claude/pipeline-state/enforcement.sha256`:
+
+```sh
+sha256sum .claude/hooks/* .claude/settings.json
+stat -c '%n %a' .claude/hooks/*
+```
+
+The trust evaluation verifies this is unchanged at the end — a mutated
+enforcement layer mid-run is a HALT. Mode is recorded alongside content
+because a content hash alone cannot detect a hook that is byte-perfect but
+not executable, which fails **open** (exit 126, which Claude Code treats as
+non-blocking) rather than closed. Also refuse to start if any hook is not
+executable — see `effective-trust` step 1a.
 
 ## Phases (each gates on the prior phase's artifact)
 1. **spec** — `spec/.signed-off` missing → dispatch spec-agent, STOP for human

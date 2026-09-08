@@ -28,6 +28,26 @@ A companion series, [AI-Assisted Coding: Harness, Context, and Course
 Alignment](ai-assisted-coding/README.md), covers the `.claude/` SDLC
 pipeline used to build the product.
 
+## Not yet mirrored: Series 2 (Parts 6-10)
+
+The product repo carries a second five-part run — the network-visibility
+collector added in ADR-0008 — that has **not** been mirrored here yet:
+
+| # | Part |
+|---|---|
+| 6 | The Blind Spot Every AI-Agent Firewall Has |
+| 7 | Visibility Without a Blank Check |
+| 8 | From Open Port to Explainable Finding |
+| 9 | Built to Fail Safe, Not Fail Quiet |
+| 10 | What This Doesn't Do Yet |
+
+The sync between the product repo's `docs/blog/` and this mirror is manual
+(the product repo's own `docs/blog/README.md` says so: *"no automated sync
+exists yet"*), and it has drifted. Parts 1-5 here are the shorter
+dual-audience rewrite, not stale copies — that divergence is deliberate.
+Parts 6-10 are simply absent. Closing this is tracked in
+[the factory assessment](docs/assessments/2026-09-07-ai-first-factory-assessment.md).
+
 ## Publishing notes (LinkedIn ↔ GitHub alignment)
 
 - Each part is written to work **verbatim as a LinkedIn article**: hook,
